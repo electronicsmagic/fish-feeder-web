@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Fish Tank Feeder</title>
+
+  <!-- Include MQTT.js from a CDN (WebSocket MQTT client) -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+  <!-- Basic styling for layout and display -->
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background-color: #f4f4f4;
+    }
+    .row { margin-bottom: 15px; }
+    label { display: inline-block; width: 180px; }
+    input { padding: 5px; width: 120px; }
+    button { padding: 8px 16px; margin-top: 10px; }
+    #statusBox {
+      margin-top: 30px;
+      padding: 15px;
+      background-color: #fff;
+      border-radius: 10px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.2);
+    }
+    #statusBox p {
+      font-size: 1.2em;
+      margin: 8px 0;
+    }
+    #status {
+      font-weight: bold;
+      color: green;
+    }
+    #nextRun {
+      font-weight: bold;
+      color: #007BFF;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Page header -->
+  <h2>Fish Tank Feeder</h2>
+  <p>Enter the number of turns and repeats per day</p>
+
+  <!-- Input fields for user to enter motor turn and repeat/day values -->
+  <div class="row">
+    <label for="Number1">Number of turns:</label>
+    <input type="number" id="Number1" placeholder="e.g. 3">
+  </div>
+
+  <div class="row">
+    <label for="Number2">Repeats per day:</label>
+    <input type="number" id="Number2" placeholder="e.g. 2">
+  </div>
+
+  <!-- Button to send user input to ESP32 via MQTT -->
+  <button onclick="sendNumbers()">Send to Feeder</button>
+
+  <!-- Display box for real-time MQTT status, motor status, and next scheduled run -->
+  <div id="statusBox">
+    <p>📡 MQTT Status: <span id="mqttStatus">Connecting...</span></p>
+    <p>🔁 Motor Status: <span id="status">—</span></p>
+    <p>🕒 Next Run Time: <span id="nextRun">—</span></p>
+  </div>
+
+  <!-- JavaScript logic for MQTT communication -->
+  <script>
+    // Connect to HiveMQ broker over WebSockets
+    const client = mqtt.connect("wss://broker.hivemq.com:8884/mqtt", {
+      reconnectPeriod: 2000 // try to reconnect every 2 seconds if disconnected
+    });
+
+    // Called when connection to MQTT broker is successful
+    client.on("connect", () => {
+      document.getElementById("mqttStatus").innerText = "✅ Connected to MQTT";
+
+      // Subscribe to status updates and next run time from ESP32
+      client.subscribe("esp32/status");
+      client.subscribe("esp32/nextrun");
+    });
+
+    // Called if there's an MQTT connection error
+    client.on("error", (err) => {
+      document.getElementById("mqttStatus").innerText = "❌ MQTT Connection Error";
+      console.error("MQTT connection failed:", err);
+    });
+
+    // Handle incoming MQTT messages
+    client.on("message", (topic, message) => {
+      if (topic === "esp32/status") {
+        // Display motor status like "Running" or "Stopped at 10:25:01"
+        document.getElementById("status").innerText = message.toString();
+      } else if (topic === "esp32/nextrun") {
+        // Display next scheduled run time like "14:30:00"
+        document.getElementById("nextRun").innerText = message.toString();
+      }
+    });
+
+    // Called when user clicks "Send to ESP32"
+    function sendNumbers() {
+      const Number1 = document.getElementById("Number1").value;
+      const Number2 = document.getElementById("Number2").value;
+
+      // Simple input validation
+      if (!Number1 || !Number2) {
+        alert("Please enter both number of turns and repeats.");
+        return;
+      }
+
+      // Create a JSON payload to send to the ESP32
+      const payload = JSON.stringify({
+        Number1: parseInt(Number1),  // Number of turns
+        Number2: parseInt(Number2)   // Repeats per day
+      });
+
+      // Publish to the MQTT topic ESP32 is subscribed to
+      if (client.connected) {
+        client.publish("esp32/FishTank", payload);
+        alert(`Sent: Turns = ${Number1}, Repeats/day = ${Number2}`);
+      } else {
+        alert("MQTT not connected.");
+      }
+    }
+  </script>
+
+</body>
+</html>
